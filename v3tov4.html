@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tailwind V3 to V4 Config Converter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0C120C;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div class="bg-[#1a201a] rounded-3xl shadow-2xl max-w-4xl w-full p-8 space-y-8 border border-[#1e251e]">
+        <header class="text-center">
+            <h1 class="text-3xl sm:text-4xl font-bold text-[#E0FBFC]">
+                Tailwind CSS V3 to V4 Converter
+            </h1>
+            <p class="mt-2 text-[#E0FBFC] max-w-2xl mx-auto opacity-80">
+                Paste your Tailwind CSS v3 config below to convert it to the new v4 `@import` syntax.
+            </p>
+        </header>
+
+        <main class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div class="space-y-4">
+                <label for="inputConfig" class="block text-sm font-medium text-[#E0FBFC]">
+                    Tailwind CSS v3 Config (tailwind.config.js or .ts)
+                </label>
+                <textarea id="inputConfig" rows="15"
+                    class="block w-full rounded-2xl border-[#1e251e] shadow-sm bg-[#0C120C] text-[#E0FBFC] focus:border-[#F34213] focus:ring-[#F34213] transition-all duration-300 ease-in-out p-4 font-mono text-sm resize-none"
+                    placeholder="Paste your Tailwind CSS v3 config here. Make sure it starts with `module.exports = { ... }` or similar."></textarea>
+                <button id="convertBtn"
+                    class="w-full flex justify-center py-3 px-4 rounded-2xl shadow-md text-[#0C120C] bg-[#E0FBFC] hover:bg-[#c2e2e3] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#E0FBFC] transition-all duration-300 ease-in-out">
+                    Convert to V4 Syntax
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <label for="outputConfig" class="block text-sm font-medium text-[#E0FBFC]">
+                    Tailwind CSS v4 `@import` Syntax (globals.css)
+                </label>
+                <textarea id="outputConfig" rows="15" readonly
+                    class="block w-full rounded-2xl border-[#1e251e] bg-[#0C120C] shadow-inner p-4 font-mono text-sm resize-none select-all text-[#E0FBFC]"
+                    placeholder="Your converted v4 syntax will appear here."></textarea>
+                <button id="copyBtn"
+                    class="w-full flex justify-center py-3 px-4 rounded-2xl shadow-md text-white bg-[#F34213] hover:bg-[#d83b11] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#F34213] transition-all duration-300 ease-in-out">
+                    Copy to Clipboard
+                </button>
+            </div>
+
+        </main>
+
+        <footer class="text-center text-sm text-[#E0FBFC] opacity-70 mt-6">
+            <p>
+                Made with ❤️ by <a href="https://github.com/Skullmc1" class="text-[#F34213] hover:underline" target="_blank">Qclid</a>
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputConfig = document.getElementById('inputConfig');
+            const outputConfig = document.getElementById('outputConfig');
+            const convertBtn = document.getElementById('convertBtn');
+            const copyBtn = document.getElementById('copyBtn');
+
+            function convertConfig() {
+                const configString = inputConfig.value;
+                let output = `@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n`;
+
+                try {
+                    const exportStartIndex = configString.indexOf('module.exports =');
+                    if (exportStartIndex === -1) {
+                        outputConfig.value = "/* Invalid config: Could not find 'module.exports ='. */";
+                        return;
+                    }
+                    const objectStartIndex = configString.indexOf('{', exportStartIndex);
+                    const objectEndIndex = configString.lastIndexOf('}');
+                    
+                    if (objectStartIndex === -1 || objectEndIndex === -1 || objectEndIndex < objectStartIndex) {
+                        outputConfig.value = '/* Invalid config: Could not find a valid configuration object. */';
+                        return;
+                    }
+
+                    const objectString = configString.substring(objectStartIndex, objectEndIndex + 1);
+
+                    const config = new Function(`return ${objectString}`)();
+
+                    const pluginRegex = /require\(['"`](@tailwindcss\/[^'"`]+)['"`]\)/g;
+                    let match;
+                    let pluginsFound = false;
+                    while ((match = pluginRegex.exec(configString)) !== null) {
+                        if (!pluginsFound) {
+                             output += `/* Converted plugins */\n`;
+                             pluginsFound = true;
+                        }
+                        output += `@import "${match[1]}";\n`;
+                    }
+                    if (pluginsFound) output += '\n';
+
+
+                    const themeExtend = config?.theme?.extend;
+                    if (!themeExtend) {
+                        outputConfig.value = output + '/* No theme extensions found to convert. */';
+                        return;
+                    }
+
+                    let themeOutput = '';
+                    const themeEntries = Object.entries(themeExtend);
+                    const themeKeysToProcess = themeEntries.filter(([key]) => key !== 'keyframes' && key !== 'animation');
+
+                    if (themeKeysToProcess.length > 0) {
+                        themeOutput += `@theme {\n`;
+                        for (const [key, value] of themeKeysToProcess) {
+                            themeOutput += `  ${key}: {\n`;
+                            for (const [subKey, subValue] of Object.entries(value)) {
+                                if (Array.isArray(subValue)) {
+                                    themeOutput += `    '${subKey}': "${subValue.join(', ')}",\n`;
+                                } else if (typeof subValue === 'object' && subValue !== null) {
+                                    for (const [nestedKey, nestedValue] of Object.entries(subValue)) {
+                                        themeOutput += `    '${subKey}-${nestedKey}': '${nestedValue}',\n`;
+                                    }
+                                } else {
+                                    themeOutput += `    '${subKey}': '${subValue}',\n`;
+                                }
+                            }
+                            themeOutput += `  },\n`;
+                        }
+                        themeOutput += `}\n\n`;
+                    }
+
+
+                    if (themeExtend.keyframes) {
+                        for (const [name, frames] of Object.entries(themeExtend.keyframes)) {
+                            output += `@keyframes ${name} {\n`;
+                            for (const [percentage, styles] of Object.entries(frames)) {
+                                output += `  ${percentage} {\n`;
+                                for (const [prop, val] of Object.entries(styles)) {
+                                    const kebabProp = prop.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
+                                    output += `    ${kebabProp}: ${val};\n`;
+                                }
+                                output += `  }\n`;
+                            }
+                            output += `}\n\n`;
+                        }
+                    }
+                    
+                    output += themeOutput.trim();
+
+                    if (themeExtend.animation) {
+                        output += '\n\n/* Converted animation utilities */\n';
+                        for (const [name, value] of Object.entries(themeExtend.animation)) {
+                           output += `@utility .animate-${name} {\n  animation: ${value};\n}\n`;
+                        }
+                    }
+
+                    outputConfig.value = output.trim();
+
+                } catch (error) {
+                    console.error("Conversion Error:", error);
+                    outputConfig.value = `/* Failed to parse config. Please check for syntax errors.\nError: ${error.message} */`;
+                }
+            }
+
+            function copyToClipboard() {
+                if (!outputConfig.value || outputConfig.value.startsWith('/*')) return;
+                navigator.clipboard.writeText(outputConfig.value).then(() => {
+                    const originalBtnText = copyBtn.textContent;
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(() => {
+                        copyBtn.textContent = originalBtnText;
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy text: ', err);
+                });
+            }
+
+            convertBtn.addEventListener('click', convertConfig);
+            copyBtn.addEventListener('click', copyToClipboard);
+            convertConfig();
+        });
+    </script>
+
+</body>
+</html>
